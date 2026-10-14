@@ -68,6 +68,7 @@ jobs:
     
     docker:
         runs-on: ubuntu-latest
+        needs: [lint-test, security-scan] 
         steps: 
 
             - name: checkout source
