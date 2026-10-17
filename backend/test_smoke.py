@@ -1,7 +1,8 @@
-from app import app, db
 import os
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['REDIS_URL'] = 'redis://localhost:6379/0'
+
+from app import app, db
 
 
 def test_health():
