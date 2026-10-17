@@ -117,3 +117,6 @@ jobs:
                     ${{ env.IMAGE_NAME }}:${{ github.sha }}
                     ${{ env.IMAGE_NAME }}:latest
                 cache-from: type=gha
+            
+            - name: push to Amazon ECR
+
