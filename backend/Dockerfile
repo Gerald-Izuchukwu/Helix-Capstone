@@ -5,7 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir --upgrade "pip>=25.0" "setuptools>=78" "wheel>=0.46.2"
+ && pip install --no-cache-dir --upgrade "pip>=25.0" "setuptools>=83.0.0" "wheel>=0.46.2" \
+ && pip uninstall -y pip setuptools wheel
 
 COPY . .
 
