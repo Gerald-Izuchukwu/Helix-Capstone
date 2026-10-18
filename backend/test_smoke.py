@@ -2,7 +2,7 @@ import os
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['REDIS_URL'] = 'redis://localhost:6379/0'
 
-from app import app, db # noqa: E402
+from app import app, db  # noqa: E402
 
 
 def test_health():
