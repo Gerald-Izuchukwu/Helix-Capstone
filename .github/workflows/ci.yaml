@@ -15,7 +15,7 @@ permissions:
     id-token: write
 
 env: 
-    IMAGE_NAME: gerald22/shopflow_be 
+    IMAGE_NAME: gerald22/shopflow_be:1.3 
     DOCKERHUB_USERNAME: gerald22
     ECR_REPOSITORY: shopflow-helix-capstone
 
@@ -31,22 +31,22 @@ jobs:
               with:
                 python-version: "3.11"
                 cache: "pip"
-                cache-dependency-path: backend/requirements.txt
+                cache-dependency-path: application/backend/requirements.txt
 
             - name: Install dependencies
-              working-directory: ./backend
+              working-directory: ./application/backend
               run: |
                 python -m pip install --upgrade pip
                 pip install -r requirements.txt
             
             - name: Lint 
-              working-directory: ./backend
+              working-directory: ./application/backend
               run: |
                 pip install flake8
                 flake8 .
 
             - name: Test
-              working-directory: ./backend
+              working-directory: ./application/backend
               run: |
                     pip install pytest
                     pytest
