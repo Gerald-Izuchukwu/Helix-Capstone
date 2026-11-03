@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:latest
+    image: redis:7.4-alpine
     container_name: redis
     restart: always
     networks:
@@ -14,7 +14,7 @@ services:
       retries: 5
       start_period: 30s
   postgres:
-    image: postgres:latest
+    image: postgres:17-alpine
     container_name: postgres
     restart: always
     networks:
@@ -33,7 +33,7 @@ services:
       start_period: 30s
 
   backend: 
-    image: shopflow_be:1
+    image: gerald22/shopflow_be:1.3
     container_name: backend
     restart: always
     networks:
@@ -41,7 +41,7 @@ services:
     ports:
       - 5000:5000
     env_file:
-      - ./backend/config.env
+      - ./application/backend/config.env
     depends_on:
       redis:
         condition: service_healthy
@@ -49,13 +49,13 @@ services:
         condition: service_healthy
   
   frontend:
-    image: shopflow_fe:a1
+    image: gerald22/shopflow_fe:1.0
     container_name: frontend
     restart: always
     networks:
       - mynetwork
     ports:
-      - 80:80
+      - 8089:80
 
 networks:
   mynetwork:

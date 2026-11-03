@@ -1,5 +1,7 @@
-backend/venv/**
-backend/__pycache__/**
-backend/.pytest_cache/
-backend/*.pyc
-backend/.env
+application/backend/venv/**
+application/backend/__pycache__/**
+application/backend/.pytest_cache/
+application/backend/*.pyc
+application/backend/config.env
+k8s/*secret.yaml
+!k8s/*secret.example.yaml
