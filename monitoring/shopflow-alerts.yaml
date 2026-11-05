@@ -1,0 +1,65 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shopflow-alerts
+  namespace: monitoring
+  labels:
+    app: shopflow
+spec:
+  groups:
+  - name: shopflow.rules
+    rules:
+    - alert: BackendHighErrorRate
+      expr: |
+        sum(rate(flask_http_request_duration_seconds_count{path!~"/health|/ready|/metrics",status=~"5.."}[5m]))
+        /
+        sum(rate(flask_http_request_duration_seconds_count{path!~"/health|/ready|/metrics"}[5m]))
+        > 0.05
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Backend 5xx error rate above 5%"
+        description: "More than 5% of user requests have returned a 5xx status for 5 minutes. Check backend logs and whether Postgres or Redis is reachable."
+
+    - alert: BackendHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          sum by (le) (rate(flask_http_request_duration_seconds_bucket{path!~"/health|/ready|/metrics"}[5m]))
+        ) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Backend p95 latency above 1 second"
+        description: "The 95th percentile request latency has been above 1s for 5 minutes. Check backend CPU, database load and the HPA replica count."
+
+    - alert: PodRestartingFrequently
+      expr: |
+        increase(kube_pod_container_status_restarts_total{namespace="shopflow"}[15m]) > 2
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod {{ $labels.pod }} restarted more than 2 times in 15 minutes"
+        description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is restarting repeatedly. Run kubectl logs --previous and kubectl describe pod to find the cause."
+
+    - alert: BackendDown
+      expr: |
+        kube_deployment_status_replicas_available{namespace="shopflow",deployment="backend"} < 1
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "No backend replicas available"
+        description: "The backend deployment has no available replicas, so the API is unreachable. Check pod status and recent rollouts."
+
+    - alert: DatabaseUnavailable
+      expr: |
+        kube_deployment_status_replicas_available{namespace="shopflow",deployment="postgres"} < 1
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "PostgreSQL has no available replicas"
+        description: "The postgres deployment has no ready pod. Backend requests that need the database will fail. Check the postgres pod and its PVC."
