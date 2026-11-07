@@ -1,11 +1,3 @@
-FROM nginx:alpine
-
-COPY index.html /usr/share/nginx/html
-
-RUN addgroup --system appgroup && \
-    adduser --system --ingroup appgroup appuser && \
-    chown -R appuser:appgroup /app
-
-USER appuser
-
-EXPOSE 80
+FROM nginxinc/nginx-unprivileged:1.28-alpine
+COPY index.html /usr/share/nginx/html/index.html
+EXPOSE 8080
