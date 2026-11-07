@@ -78,7 +78,7 @@ jobs:
             - name: Lint Dockerfile
               uses: hadolint/hadolint-action@v3.1.0
               with:
-                dockerfile: ./backend/Dockerfile
+                dockerfile: ./application/backend/Dockerfile
                 failure-threshold: warning
 
             - name: Setting up buildx
@@ -87,8 +87,8 @@ jobs:
             - name: Build image
               uses: docker/build-push-action@v6
               with:
-                context: ./backend
-                file: ./backend/Dockerfile
+                context: ./application/backend
+                file: ./application/backend/Dockerfile
                 push: false
                 load: true
                 tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
@@ -127,8 +127,8 @@ jobs:
               if: github.event_name == 'push' && github.ref == 'refs/heads/main'
               uses: docker/build-push-action@v6
               with:
-                context: ./backend
-                file: ./backend/Dockerfile
+                context: ./application/backend
+                file: ./application/backend/Dockerfile
                 push: true
                 tags: |
                     ${{ env.IMAGE_NAME }}:${{ github.sha }}
