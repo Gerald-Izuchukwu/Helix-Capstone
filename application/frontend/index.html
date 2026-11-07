@@ -9,17 +9,20 @@
     <p class="subtitle">Simple e-commerce application for a DevOps engineering capstone.</p>
     <div id="status" class="status">Loading products...</div><div id="products"></div>
 <script>
+    const API_BASE = location.hostname.endsWith('onrender.com')
+    ? 'https://shopflow-be-latest.onrender.com'
+    : 'http://localhost:5000';
     async function loadProducts(){
         const status=document.getElementById('status'),
         container=document.getElementById('products');
         try{
-            const response=await fetch('http://localhost:5000/api/products');
+            const response=await fetch(`${API_BASE}/api/products`);
             if(!response.ok)
             throw new Error('Unable to load products');
         const products=await response.json();
         status.textContent=products.length?`${products.length} product(s) available.`:'No products available.';container.innerHTML=products.map(p=>`<div class="card"><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description||'')}</p><strong>₦${Number(p.price).toLocaleString()}</strong><p>Stock: ${p.stock}</p><button onclick="placeOrder(${p.id})">Buy 1</button></div>`).join('')}catch(e){status.textContent=e.message}}
     async function placeOrder(productId){
-        const response=await fetch('http://localhost:5000/api/orders',{
+        const response=await fetch(`${API_BASE}/api/orders`,{
             method:'POST',
             headers:{
                 'Content-Type':'application/json'
