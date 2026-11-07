@@ -18,13 +18,19 @@ spec:
         app: postgres
     spec:
       securityContext:
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
         runAsNonRoot: true
-        runAsUser: 10001
-        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
       - name: postgres
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ "ALL" ]
         image: postgres:17-alpine
         securityContext:
           allowPrivilegeEscalation: false
@@ -73,10 +79,18 @@ spec:
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: tmp
+          mountPath: /tmp
       volumes:
       - name: postgres-data
         persistentVolumeClaim:
           claimName: postgres-pvc
+      - name: run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

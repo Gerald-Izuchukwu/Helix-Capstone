@@ -174,14 +174,120 @@ The backend's `DATABASE_URL` is assembled at runtime from the Secret values usin
 | Credentials in plaintext in the ConfigMap | `DATABASE_URL` contained the password | Same fix; recorded as a security finding for Phase 11 |
 | Redis would have failed to connect | `REDIS_URL` used port 6378, but Redis listens on 6379 | Corrected the port in the ConfigMap |
 | Empty product list in the UI | The database was recreated and nothing seeds products automatically | Expected behavior; products are added through the API |
-
 ## 9. AWS EC2 Deployment (Terraform + Ansible), Phases 6 to 8
-
-TODO
-
+ 
+Not applicable: this submission follows Track A (Minikube only).
+ 
 ## 10. Monitoring and Logging, Phases 9 and 10
-
-TODO
+ 
+Everything lives in `monitoring/` and is installed into the `monitoring` namespace.
+ 
+### Files
+ 
+| File | Purpose |
+| --- | --- |
+| `values.yaml` | Helm values for kube-prometheus-stack (Prometheus, Grafana, Alertmanager, kube-state-metrics, node-exporter) |
+| `backend-servicemonitor.yaml` | Tells Prometheus to scrape the backend's `/metrics` every 15 s |
+| `shopflow-dashboard-cm.yaml` | Grafana dashboard "ShopFlow Overview", loaded automatically by Grafana's sidecar |
+| `shopflow-alerts.yaml` | PrometheusRule with five alerts |
+| `loki-values.yaml` | Helm values for Loki (single binary, filesystem storage, 72 h retention) |
+| `alloy-values.yaml` | Helm values and pipeline for Grafana Alloy (log collection) |
+| `loki-datasource.yaml` | Registers Loki as a Grafana data source |
+ 
+### Install
+ 
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+ 
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace -f monitoring/values.yaml \
+  --set grafana.adminPassword='<set-at-install-time>'
+kubectl apply -f monitoring/backend-servicemonitor.yaml
+kubectl apply -f monitoring/shopflow-dashboard-cm.yaml
+kubectl apply -f monitoring/shopflow-alerts.yaml
+ 
+helm install loki grafana/loki -n monitoring -f monitoring/loki-values.yaml
+helm install alloy grafana/alloy -n monitoring -f monitoring/alloy-values.yaml
+kubectl apply -f monitoring/loki-datasource.yaml
+ 
+kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
+kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090 -n monitoring
+```
+ 
+The Grafana admin password is supplied on the command line at install time and is not stored in Git. Prometheus is configured to discover ServiceMonitors and rules in any namespace, and keeps 6 hours of data to limit memory use on Minikube.
+ 
+### Application metrics
+ 
+The supplied backend image did not expose `/metrics`, so the backend was instrumented with `prometheus-flask-exporter` and released as image `1.2`. It records request counts and request-duration histograms labelled by method, path and status. A ServiceMonitor selects the backend Service (which has a named `http` port) and scrapes `/metrics`.
+ 
+### Dashboard
+ 
+The "ShopFlow Overview" dashboard is stored as a ConfigMap in Git and has eight panels:
+ 
+| Panel | What it shows | Source |
+| --- | --- | --- |
+| Request rate | User requests per second by method | Backend metrics |
+| HTTP 5xx error ratio | Share of user requests returning 5xx | Backend metrics |
+| Request latency p95 / p50 | Latency percentiles from the duration histogram | Backend metrics |
+| Pod restarts | Restart count per pod | kube-state-metrics |
+| CPU usage by pod | CPU cores per pod | cAdvisor |
+| Memory usage by pod | Working-set memory per pod | cAdvisor |
+| Replicas available vs desired | Workload health per deployment | kube-state-metrics |
+| Backend pods up | Whether each backend pod is scrapeable | Prometheus `up` |
+ 
+Request panels exclude `/health`, `/ready` and `/metrics` so Kubernetes probes and Prometheus scrapes do not hide real user traffic.
+ 
+### Alerts
+ 
+| Alert | Condition | Severity |
+| --- | --- | --- |
+| `BackendHighErrorRate` | 5xx responses above 5% of user requests for 5 min | critical |
+| `BackendHighLatency` | p95 latency above 1 s for 5 min | warning |
+| `PodRestartingFrequently` | More than 2 container restarts in 15 min | warning |
+| `BackendDown` | No available backend replicas for 1 min | critical |
+| `DatabaseUnavailable` | No available Postgres replica for 1 min | critical |
+ 
+Each alert carries a description that says what to check first. Alerts were tested by scaling Postgres to zero and confirming `DatabaseUnavailable` moved from pending to firing (evidence in `docs/screenshots/phase9/`). Alertmanager receives the alerts, but no external notification receiver is configured.
+ 
+### Logging (Phase 10)
+ 
+Grafana Alloy runs as a single Deployment, discovers pods through the Kubernetes API, keeps only the `shopflow` namespace, labels each stream with `namespace`, `pod`, `container` and `app`, and pushes the logs to Loki. Loki runs in single-binary mode with 5 Gi of persistent storage and 72 hours of retention. Reading logs through the API (not from node files) suits a single-node Minikube cluster; a multi-node cluster would use a DaemonSet instead.
+ 
+Useful queries in Grafana Explore (data source Loki):
+ 
+```
+{namespace="shopflow", app="backend"}
+{namespace="shopflow", app="backend"} |~ "(?i)error|exception|OperationalError"
+sum(count_over_time({namespace="shopflow", app="backend"} |~ "(?i)error|exception" [1m]))
+```
+ 
+### Incident correlation example
+ 
+| Time | Event | Evidence |
+| --- | --- | --- |
+| TODO | Postgres scaled to 0 (simulated outage) | terminal |
+| TODO | First 500 responses; backend logs show database connection errors | Loki query |
+| TODO | `DatabaseUnavailable` firing | Prometheus alerts page |
+| TODO | Postgres restored, errors stop | Loki error-rate graph |
+ 
+Fill the times in from your own run. The log errors, the alert start times and the dashboard error panels all line up on the same window.
+ 
+### Problems encountered and fixes
+ 
+| Problem | Cause | Fix |
+| --- | --- | --- |
+| Prometheus target for the backend returned 404 | Supplied image had no `/metrics` route | Added `prometheus-flask-exporter`, released image 1.2 |
+| New backend pod refused connections during rollout | Rolling update in progress with a bad first release; old pods kept serving | Rebuilt the Deployment; documented `kubectl rollout undo` as the rollback |
+| CPU and memory panels showed no data | cAdvisor series on this cluster have a `pod` label but no `container` label, so a `container!=""` filter removed everything | Changed panel queries to filter on `pod!=""` |
+| Error-ratio panel showed "No data" while healthy | Numerator was an empty series when no 5xx occurred | Wrapped the numerator in `or vector(0)` |
+| Loki pod showed 1/2 ready at first | Slow start of the Loki container | Waited; both containers became ready, no config change |
+| Alloy pod stuck in ContainerCreating | Slow image pull | Waited for the pull (or pre-loaded the image into Minikube) |
+ 
+### Screenshots
+ 
+Saved in `docs/screenshots/phase9/` and `docs/screenshots/phase10/`: monitoring pods, Prometheus targets with the backend UP, the full dashboard under load, the alerts page (inactive and firing), Loki and Alloy pods, Explore showing backend logs, and the error-rate graph for the incident window.
 
 ## 11. Security Controls and Findings, Phase 11
 

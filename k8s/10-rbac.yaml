@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: backend, namespace: shopflow }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: frontend, namespace: shopflow }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: postgres, namespace: shopflow }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: redis, namespace: shopflow }
+automountServiceAccountToken: false

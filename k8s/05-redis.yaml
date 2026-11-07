@@ -16,13 +16,19 @@ spec:
         app: redis
     spec:
       securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
         runAsNonRoot: true
-        runAsUser: 10001
-        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
       - name: redis
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ "ALL" ]
         image: redis:7.4-alpine
         securityContext:
           allowPrivilegeEscalation: false
@@ -49,6 +55,12 @@ spec:
           limits:
             cpu: 200m
             memory: 128Mi
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
