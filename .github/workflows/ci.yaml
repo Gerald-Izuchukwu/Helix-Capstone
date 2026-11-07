@@ -15,7 +15,7 @@ permissions:
     id-token: write
 
 env: 
-    IMAGE_NAME: gerald22/shopflow_be:${{ github.sha }}
+    IMAGE_NAME: gerald22/shopflow_be
     DOCKERHUB_USERNAME: gerald22
     ECR_REPOSITORY: shopflow-helix-capstone
 
