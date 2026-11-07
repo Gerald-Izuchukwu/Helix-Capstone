@@ -30,6 +30,12 @@ spec:
           capabilities:
             drop: [ "ALL" ]
         image: redis:7.4-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 6379
         readinessProbe:
