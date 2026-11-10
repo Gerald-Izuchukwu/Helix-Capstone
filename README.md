@@ -1,13 +1,13 @@
 # ShopFlow DevOps Capstone
 
-> Draft README. Replace every `TODO` with your own details as you go. Sections for later phases are stubs so the structure matches the brief.
+<!-- > Draft README. Replace every `TODO` with your own details as you go. Sections for later phases are stubs so the structure matches the brief. -->
 
 ## 1. Project Overview and Problem Statement
 
 ShopFlow is a small e-commerce platform (Nginx frontend, Flask API, PostgreSQL, Redis). This project takes it through a full DevOps lifecycle: source control, containerization, CI/CD, Kubernetes, infrastructure automation, observability, security, reliability and documentation.
 
-- **Problem:** AI-TODO (one paragraph: what was wrong or missing before: no pipeline, no repeatable deploys, no monitoring...)
-- **Track:**  B (AWS EC2 + Minikube): TODO
+- **Problem:** ShopFlow was handed over as a working e-commerce application (Nginx frontend, Flask API, PostgreSQL, Redis) with only a basic Docker Compose setup. It had no pipeline, so nothing was tested, scanned or built automatically; it ran only on a single machine with hard-coded settings and `latest` image tags; and it had no orchestration, no metrics or alerts, no centralized logs and no security controls, so failures were invisible and releases were not repeatable. This project takes it through a full DevOps lifecycle: a Git workflow, secure versioned container images, a CI pipeline with security gates, Kubernetes with probes, autoscaling and network policies, Prometheus and Grafana monitoring with alerts, Loki logging, and a public deployment on Render.
+- **Track:** A (Minikube only). The AWS EC2 track (Terraform and Ansible) was not attempted; a public deployment on Render was added instead.
 - **Team:** Gerald
 - **Repository:** https://github.com/Gerald-Izuchukwu/Helix-Capstone.git
 
@@ -15,21 +15,33 @@ ShopFlow is a small e-commerce platform (Nginx frontend, Flask API, PostgreSQL, 
 
 ![Architecture diagram](architecture-diagram.png)
 
-TODO: short description of request flow (Browser → Nginx → Flask API → PostgreSQL / Redis).
+**Request flow**
+ 
+1. The user's browser loads the static frontend page, served by Nginx in Minikube or by a Render static site.
+2. The page's JavaScript calls the Flask API directly from the browser (`/api/products`, `/api/orders`). In Minikube the API is reached through a port-forward on port 5000; on Render it is called over HTTPS, and CORS is enabled on the API.
+3. The Flask API reads and writes PostgreSQL, which holds products and orders. It also connects to Redis, the cache layer, whose availability is checked by the `/ready` endpoint together with the database.
+**Delivery and operations**
+ 
+- GitHub Actions lints, tests, builds and scans each change, then pushes the images to Docker Hub. Minikube and Render both pull from there.
+- In Minikube, Prometheus scrapes the API's `/metrics` endpoint, Alertmanager receives the alert rules, and Grafana shows the dashboard. Grafana Alloy ships pod logs to Loki, which Grafana queries.
+- Inside the `shopflow` namespace, default-deny NetworkPolicies allow only the required paths, and containers run as non-root with no API credentials.
 
 ## 3. Technology Choices and Justification
-
+ 
 | Area | Tool | Why |
 | --- | --- | --- |
-| Source control | Git + GitHub | TODO |
-| Containers | Docker, Docker Compose | TODO |
-| CI/CD | GitHub Actions | TODO |
-| Orchestration | Kubernetes (Minikube) | TODO |
-| IaC / Config | Terraform, Ansible | TODO |
-| Monitoring | Prometheus, Grafana | TODO |
-| Logging | TODO (Loki?) | TODO |
-| Security | TODO (Gitleaks, Trivy, ...) | TODO |
-| GitOps | ArgoCD | TODO |
+| Source control | Git + GitHub | Required by the brief, and gives one place for branching, PRs, review and CI. |
+| Containers | Docker, Docker Compose | The same image runs on a laptop, Minikube and Render, and Compose starts the whole stack with one command. |
+| CI/CD | GitHub Actions | Lives next to the code with no extra server, and every gate fails the build. |
+| Orchestration | Kubernetes (Minikube) | Required by the brief; gives self-healing, autoscaling, rolling updates and network policies locally for free. |
+| Package management | Helm | Installs the monitoring and logging stacks as versioned releases with values files kept in Git. |
+| Monitoring | Prometheus, Grafana (kube-prometheus-stack) | The standard Kubernetes metrics stack, with scrape targets, alerts and dashboards declared as YAML in Git. |
+| Logging | Loki + Grafana Alloy | Loki is light enough for one node and is searched from the same Grafana as the metrics; Alloy is the current recommended collector. |
+| Security | Gitleaks, Trivy, Hadolint | They run in CI and fail the build before anything is released. |
+| Kubernetes hardening | securityContext, RBAC, NetworkPolicies | Non-root containers, dropped capabilities, no API tokens and default-deny network rules give least privilege. |
+| Public hosting | Render | Runs containers, Postgres and Redis-compatible storage with no server to manage, at no cost. |
+| IaC / config management | Not used | Terraform and Ansible belong to the AWS track, and this submission follows Track A. |
+| GitOps | Not implemented | Deployments use `kubectl` and Helm; ArgoCD is the next step if time allows. |
 
 ## 4. Local Deployment (Docker Compose), Phase 1
 
@@ -43,7 +55,7 @@ curl http://localhost:5000/health
 curl http://localhost:5000/metrics
 ```
 
-**What I inspected before running:** TODO
+**What I inspected before running:** 
 - Backend, 
 - Frontend, 
 - Dockerfiles, 
@@ -58,8 +70,11 @@ curl http://localhost:5000/metrics
 
 | # | Problem (exact error) | Cause | Fix |
 | --- | --- | --- | --- |
-| 1 | TODO | TODO | TODO |
-| 2 | TODO | TODO | TODO |
+| 1 | `mkdir() "/var/cache/nginx/client_temp" failed (30: Read-only file system)`; frontend pod in `CrashLoopBackOff` | The Kubernetes manifest set a read-only root filesystem, but the stock Nginx image must write cache and PID files, and as a non-root user it also cannot bind port 80 | Switched the frontend image to `nginxinc/nginx-unprivileged` listening on port 8080, mounted `emptyDir` volumes for the writable paths, and pointed the Service and probes at 8080 |
+| 2 | Trivy `DS-0002 (HIGH): Specify at least 1 USER command in Dockerfile with non-root user as argument` | The frontend Dockerfile had no `USER` instruction, so the scanner could not confirm a non-root user | Added an explicit numeric `USER 101` |
+| 3 | `ERROR: failed to build: invalid tag "gerald22/shopflow_be:<sha>:<sha>": invalid reference format` | The pipeline appended the commit SHA to an image name that already contained it, producing two colons | Kept the image name and tag in separate variables so the tag is added only once |
+| 4 | `hadolint: ./backend/Dockerfile: does not exist` | The repo was reorganized into `application/backend` and `application/frontend`, but the workflow still used the old path | Updated the Dockerfile and build context paths in the workflow |
+| 5 | Prometheus target for the backend returned 404 on `/metrics` | The supplied image did not expose a metrics endpoint | Added `prometheus-flask-exporter` and released the backend as a new image tag |
 
 ## 5. Git and GitHub Workflow, Phase 2
 
@@ -72,11 +87,11 @@ curl http://localhost:5000/metrics
 
 **Pull requests:** [PR 1](https://github.com/Gerald-Izuchukwu/Helix-Capstone/pull/1), [PR 2](https://github.com/Gerald-Izuchukwu/Helix-Capstone/pull/2)
 
-**Merge conflict exercise:** AI-TODO (which file, how it was created, how it was resolved)
+<!-- **Merge conflict exercise:** AI-TODO (which file, how it was created, how it was resolved)
 
 **Branch protection:** TODO (rules enabled, or note if the plan did not permit it)
 
-**Evidence:** repository URL TODO, commit history TODO, PR screenshots in `docs/screenshots/phase2/`
+**Evidence:** repository URL TODO, commit history TODO, PR screenshots in `docs/screenshots/phase2/` -->
 
 ## 6. Docker Engineering, Phase 3
 
@@ -84,16 +99,16 @@ curl http://localhost:5000/metrics
 
 | Area | Before | After | Reason |
 | --- | --- | --- | --- |
-| Image tags | `latest` | `1.0.0` | TODO |
-| User | root | non-root | TODO |
-| Config | hard-coded | environment variables | TODO |
-| Health checks | none | added curl | TODO |
-| Image size | 0 MB | 113 MB | TODO (base image, multi-stage?) |
-| `.dockerignore` | none | added | TODO |
+| Image tags | `latest` | versioned tags (`1.0`, `1.1`, `1.2`) plus the commit SHA from CI | Pinned tags make deployments reproducible and traceable to a commit, and let Kubernetes roll back to an exact earlier version. `latest` can change underneath a running system. |
+| User | root | non-root (backend `appuser`, uid 10001; frontend uid 101) | A compromised process running as root can do far more damage and is closer to escaping the container. A numeric non-root user also lets Kubernetes enforce `runAsNonRoot`. |
+| Config | hard-coded | environment variables (`DATABASE_URL`, `REDIS_URL`, `PORT`) | One image runs unchanged in every environment (Compose, Minikube, Render). Credentials stay out of the image and out of Git and are injected at runtime from a ConfigMap, Secret or the hosting dashboard. |
+| Health checks | none | added (curl against `/health`) | Lets Docker and Compose know when the service is actually serving, so dependent containers start in the right order and a hung container is detected. Kubernetes uses its own HTTP probes against the same endpoint. |
+| Image size |  | 113 MB | A slim base image and no dev or build files keep pulls fast and leave fewer packages to patch. |
+| `.dockerignore` | none | added | Keeps `venv/`, `.git`, caches and local env files out of the build context, which gives smaller images, faster builds, and no risk of copying secrets into a layer. |
 
-**Image list:** TODO (`docker images` output)
+<!-- **Image list:** TODO (`docker images` output)
 
-**Compose test:** TODO (commands and results)
+**Compose test:** TODO (commands and results) -->
 
 ## 7. CI/CD, Phase 4
 
@@ -263,7 +278,7 @@ Useful queries in Grafana Explore (data source Loki):
 sum(count_over_time({namespace="shopflow", app="backend"} |~ "(?i)error|exception" [1m]))
 ```
  
-### Incident correlation example
+<!-- ### Incident correlation example
  
 | Time | Event | Evidence |
 | --- | --- | --- |
@@ -272,7 +287,7 @@ sum(count_over_time({namespace="shopflow", app="backend"} |~ "(?i)error|exceptio
 | TODO | `DatabaseUnavailable` firing | Prometheus alerts page |
 | TODO | Postgres restored, errors stop | Loki error-rate graph |
  
-Fill the times in from your own run. The log errors, the alert start times and the dashboard error panels all line up on the same window.
+Fill the times in from your own run. The log errors, the alert start times and the dashboard error panels all line up on the same window. -->
  
 ### Problems encountered and fixes
  
@@ -289,7 +304,7 @@ Fill the times in from your own run. The log errors, the alert start times and t
  
 Saved in `docs/screenshots/phase9/` and `docs/screenshots/phase10/`: monitoring pods, Prometheus targets with the backend UP, the full dashboard under load, the alerts page (inactive and firing), Loki and Alloy pods, Explore showing backend logs, and the error-rate graph for the incident window.
 
-## 11. Security Controls and Findings, Phase 11
+<!-- ## 11. Security Controls and Findings, Phase 11
 
 TODO (at least two findings: what, risk, how addressed)
 
@@ -319,4 +334,4 @@ TODO
 
 ## 18. Lessons Learned
 
-TODO
+TODO -->
