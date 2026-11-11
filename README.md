@@ -1,5 +1,7 @@
 # ShopFlow DevOps Capstone
 
+[Click here to view live link](https://helix-capstone.onrender.com)
+
 <!-- > Draft README. Replace every `TODO` with your own details as you go. Sections for later phases are stubs so the structure matches the brief. -->
 
 ## 1. Project Overview and Problem Statement
